@@ -1,4 +1,5 @@
-#Test
+#Analyses data and creates a graph
+#Note to check response time exclusions, they're pretty close right now (within 3 sig fig) but not exactly equal
 require('tidyverse')
 require('R.matlab')
 
@@ -65,9 +66,26 @@ finalData <- as_tibble(finalData)
 finalData <-filter(finalData, !(Condition == 1 & Subject == 1)) #Filter bad participants (DON'T FORGET TO REMOVE THESE)
 finalData <-filter(finalData, !(Condition == 1 & Subject == 5))
 
-testBlock <- arrange(finalData, Condition, Subject, Trial) %>% 
+#Remove trials with bad RT times
+finalData <- group_by(finalData, Subject, Block, Condition) %>% 
+  mutate(RTcutoff = 2*sd(RT), RTmean = mean(RT)) %>% 
+  ungroup() %>% 
+  arrange(Condition, Subject, Trial) %>% 
+  filter(RT < RTmean + RTcutoff, RT > RTmean - RTcutoff)
+
+
+testBlock <- group_by(finalData, Condition, ShortBlock, Subject) %>% 
+  summarise(Performance = mean(Optimal)) %>% 
   group_by(Condition, ShortBlock) %>% 
-  summarise(mean(Optimal))#sort by subject then collapse
+  summarise(length = sum(Subject > 0), se = sd(Performance)/sqrt(length), Performance = mean(Performance))
+
+testBlock$Condition <- factor(testBlock$Condition)
+
+#Performance Graph
+ggplot(data = testBlock, aes(x = ShortBlock, y = Performance, colour = Condition, group = Condition)) +
+  geom_errorbar(aes(ymin = Performance - se, ymax = Performance + se, width = .2)) +
+  geom_line(size = 1.5) +
+  coord_cartesian(ylim = c(.5, 1))
 
 #Create some pretty graphs
 
