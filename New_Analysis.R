@@ -44,6 +44,7 @@ colnames(finalData) <- c('Trial', 'Block', 'LeftCue', 'RightCue', 'PredLoc', 'Op
                          'FixPred', 'TimePred', 'FixNP', 'TimeNP', 'PropPred', 'PropNP', 'TimeCross',
                          'Subject', 'Condition') #Name the columns
 
+finalData <- mutate(finalData, totalET = PropPred + PropNP)
 finalData <-  mutate(finalData, Section = case_when(Block <= 18 ~ 1,
                                           Block > 18 ~ 2)) #Create sections
 
@@ -73,20 +74,40 @@ finalData <- group_by(finalData, Subject, Block, Condition) %>%
   arrange(Condition, Subject, Trial) %>% 
   filter(RT < RTmean + RTcutoff, RT > RTmean - RTcutoff)
 
-
+#Performance Trials
 testBlock <- group_by(finalData, Condition, ShortBlock, Subject) %>% 
-  summarise(Performance = mean(Optimal)) %>% 
+  summarise(Performance = mean(Optimal),
+            PropPred = mean(PropPred),
+            PropNP = mean(PropNP),
+            totalET = mean(totalET)) %>% 
   group_by(Condition, ShortBlock) %>% 
-  summarise(length = sum(Subject > 0), se = sd(Performance)/sqrt(length), Performance = mean(Performance))
+  summarise(length = sum(Subject > 0), sePerf = sd(Performance)/sqrt(length), Performance = mean(Performance),
+            sePred = sd(PropPred)/sqrt(length), PropPred = mean(PropPred), 
+            seNP = sd(PropNP)/sqrt(length), PropNP = mean(PropNP),
+            seTotal = sd(totalET)/sqrt(length), totalET = mean(totalET))
 
 testBlock$Condition <- factor(testBlock$Condition)
 
+#Create some pretty graphs
 #Performance Graph
 ggplot(data = testBlock, aes(x = ShortBlock, y = Performance, colour = Condition, group = Condition)) +
-  geom_errorbar(aes(ymin = Performance - se, ymax = Performance + se, width = .2)) +
+  geom_errorbar(aes(ymin = Performance - sePerf, ymax = Performance + sePerf, width = .2)) +
   geom_line(size = 1.5) +
   coord_cartesian(ylim = c(.5, 1))
 
-#Create some pretty graphs
+#ET (All together)
+ggplot(data = testBlock, aes(x = ShortBlock, y = totalET, colour = Condition, group = Condition)) +
+  geom_errorbar(aes(ymin = totalET - seTotal, ymax = totalET + seTotal, width = .2)) +
+  geom_line(size = 1.5) +
+  coord_cartesian(ylim = c(0, .5))
+
+#ET (split Pred/NP)
+ggplot(data = testBlock, aes(x = ShortBlock, colour = Condition, group = Condition)) +
+  geom_errorbar(aes(ymin = PropPred - sePred, ymax = PropPred + sePred, width = .2)) +
+  geom_line(aes(y = PropPred), size = 1.5) +
+  geom_errorbar(aes(ymin = PropNP - seNP, ymax = PropNP + seNP, width = .2)) +
+  geom_line(aes(y = PropNP), size = 1.5, linetype = 2) +
+  coord_cartesian(ylim = c(0, .5)) 
+
 
 setwd('../New_Analysis')
