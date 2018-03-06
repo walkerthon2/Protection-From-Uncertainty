@@ -86,7 +86,7 @@ testBlock <- group_by(finalData, Condition, ShortBlock, Subject) %>%
             seNP = sd(PropNP)/sqrt(length), PropNP = mean(PropNP),
             seTotal = sd(totalET)/sqrt(length), totalET = mean(totalET))
 
-testBlock$Condition <- factor(testBlock$Condition)
+testBlock$Condition <- factor(testBlock$Condition, levels = c(1, 2), labels = c('S2C', 'S2M'))
 
 #Create some pretty graphs
 #Performance Graph
