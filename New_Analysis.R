@@ -81,11 +81,13 @@ finalData <-filter(finalData, !(Condition == 2 & Subject == 20 + (cond - 1) * pN
 finalData <-filter(finalData, !(Condition == 2 & Subject == 21 + (cond - 1) * pNum))
 
 #Remove trials with bad RT times
+#R Differs from Matlab because MATLAB averages the blocks first and then averages again (weighting blocks with fewer trials 
+#higher than it should), R doesn't do this. 
 finalData <- group_by(finalData, Subject, Block, Condition) %>% 
   mutate(RTcutoff = 2*sd(RT), RTmean = mean(RT)) %>% 
   ungroup() %>% 
   arrange(Condition, Subject, Trial) %>% 
-  filter(RT < RTmean + RTcutoff, RT > RTmean - RTcutoff, RT <= 10)
+  filter(RT < RTmean + RTcutoff, RT > RTmean - RTcutoff)
 
 finalData$Condition <- factor(finalData$Condition, levels = c(1, 2), labels = c('S2C', 'S2M'))
 # finalData$ShortBlock <- factor(finalData$ShortBlock)
