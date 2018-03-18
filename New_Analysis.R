@@ -6,8 +6,9 @@ require('ez')
 require('lme4')
 require('aod')
 require('car')
+require('lmerTest')
 
-pNum <- 25 #Number of participants to analyse
+pNum <- 29 #Number of participants to analyse
 cNum <- 2 #Number of conditions to Analyse
 
 for (cond in 1:cNum){
@@ -101,7 +102,7 @@ testBlock <- group_by(finalData, Condition, ShortBlock, Subject) %>%
             seNP = sd(PropNP)/sqrt(length), PropNP = mean(PropNP),
             seTotal = sd(totalET)/sqrt(length), totalET = mean(totalET))
 
-#Create some pretty graphs
+#Create some pretty graphs ----
 windowsFonts(Arial=windowsFont("Arial"))
 #Performance Graph
 ggplot(data = testBlock, aes(x = ShortBlock, y = Performance, colour = Condition, group = Condition)) +
@@ -176,9 +177,100 @@ ggplot(data = testBlock, aes(x = ShortBlock, colour = Condition, group = Conditi
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12))
 
-Stage2 <- filter(finalData, Section == 2) %>%
-  select(Optimal, Condition, ShortBlock, Subject, totalET, PropPred, PropNP)
+#RUn Logistic Regressions ----
+#Stage 1 ====
+Stage1 <- filter(finalData, Section == 1) %>%
+  select(Optimal, Condition, ShortBlock, Subject)
 
+#Logistic Regression
+#https://osf.io/z57tn/
+Stage1$ShortBlock <- factor(Stage1$ShortBlock)
+Stage1$Condition <- factor(Stage1$Condition)
+
+Stage1Count <- mutate(Stage1, counter = Subject>0)
+Stage1Count <- aggregate(counter ~ Subject + ShortBlock + Condition, data = Stage1Count, sum)
+Stage1Condense <- aggregate(Optimal ~ Subject + ShortBlock + Condition, data = Stage1, sum)
+Stage1Condense <- mutate(Stage1Condense, count = Stage1Count$counter)
+
+Stage1Condense$Subject = factor(Stage1Condense$Subject)
+logModelS1 <- glmer(cbind(Optimal, count - Optimal) ~ ShortBlock * Condition + (1 | Subject), 
+                    family = binomial(),
+                    data = Stage1Condense, 
+                    contrasts = list(ShortBlock = contr.poly, Condition = contr.helmert(2)),
+                    control = glmerControl(optimizer = 'bobyqa'))
+S1_2 <- glmer(cbind(Optimal, count - Optimal) ~ Condition + (1 | Subject), 
+              family = binomial(),
+              data = Stage1Condense,
+              control = glmerControl(optimizer = 'bobyqa'))
+S1_3 <- glmer(cbind(Optimal, count - Optimal) ~ ShortBlock + (1 | Subject), 
+              family = binomial(),
+              data = Stage1Condense,
+              control = glmerControl(optimizer = 'bobyqa'))
+S1_4 <- glmer(cbind(Optimal, count - Optimal) ~ 1 + (1 | Subject), 
+              family = binomial(),
+              data = Stage1Condense,
+              control = glmerControl(optimizer = 'bobyqa'))
+S1_5 <- glmer(cbind(Optimal, count - Optimal) ~ ShortBlock + Condition + (1 | Subject), 
+              family = binomial(),
+              data = Stage1Condense, 
+              control = glmerControl(optimizer = 'bobyqa'))
+
+anova(S1_4, S1_2) #Condition
+anova(S1_4, S1_3) #ShortBlock
+anova(S1_3, S1_5) #Condition + ShortBlock
+anova(S1_5, logModelS1) #Full model w/ Interaction
+
+summary(logModelS1)
+  Anova(logModelS1, type = "III")
+# logModelS1_ci <- confint(logModelS1, parm = 'beta_', parallel = 'snow', ncpus = 16)
+
+#Transition ====
+Trans <- filter(finalData, ShortBlock == 9 | ShortBlock == 10) %>%
+  select(Optimal, Condition, ShortBlock, Subject)
+
+#Logistic Regression
+#https://osf.io/z57tn/
+Trans$ShortBlock <- factor(Trans$ShortBlock)
+Trans$Condition <- factor(Trans$Condition)
+
+TransCount <- mutate(Trans, counter = Subject>0)
+TransCount <- aggregate(counter ~ Subject + ShortBlock + Condition, data = TransCount, sum)
+TransCondense <- aggregate(Optimal ~ Subject + ShortBlock + Condition, data = Trans, sum)
+TransCondense <- mutate(TransCondense, count = TransCount$counter)
+
+TransCondense$Subject = factor(TransCondense$Subject)
+logModelTrans <- glmer(cbind(Optimal, count - Optimal) ~ ShortBlock * Condition + (1 | Subject), 
+                       family = binomial(),
+                       data = TransCondense, 
+                       contrasts = list(ShortBlock = contr.poly, Condition = contr.treatment(2, base = 1)),
+                       control = glmerControl(optimizer = 'bobyqa'))
+Trans_2 <- glmer(cbind(Optimal, count - Optimal) ~ Condition + (1 | Subject), 
+                 family = binomial(),
+                 data = TransCondense, 
+                 control = glmerControl(optimizer = 'bobyqa'))
+Trans_3 <- glmer(cbind(Optimal, count - Optimal) ~ ShortBlock + (1 | Subject), 
+                 family = binomial(),
+                 data = TransCondense, 
+                 control = glmerControl(optimizer = 'bobyqa'))
+Trans_4 <- glmer(cbind(Optimal, count - Optimal) ~ 1 + (1 | Subject), 
+                 family = binomial(),
+                 data = TransCondense, 
+                 control = glmerControl(optimizer = 'bobyqa'))
+Trans_5 <- glmer(cbind(Optimal, count - Optimal) ~ ShortBlock + Condition + (1 | Subject), 
+                 family = binomial(),
+                 data = TransCondense, 
+                 control = glmerControl(optimizer = 'bobyqa'))
+
+anova(Trans_4, Trans_2) #Condition
+anova(Trans_4, Trans_3) #ShortBlock
+anova(Trans_3, Trans_5) #Condition + ShortBlock
+anova(Trans_5, logModelTrans) #Full model w/ Interaction
+
+summary(logModelTrans)
+Anova(logModelTrans, type = "III")
+logModelTrans_ci <- confint(logModelTrans, parm = 'beta_', parallel = 'snow', ncpus = 16)
+
+#Stage 2 ====
 #Logistic Regression
 #Run profile likelihood confidence intervals (if conf interval includes 0 it's not significant)
 #Different intercepts for shortblock and subject
@@ -187,37 +279,419 @@ Stage2 <- filter(finalData, Section == 2) %>%
 #Define frequency
 #Summarize the blocks
 #https://osf.io/z57tn/
+Stage2 <- filter(finalData, Section == 2) %>%
+  select(Optimal, Condition, ShortBlock, Subject, totalET, PropPred, PropNP, Trial)
 Stage2$ShortBlock <- factor(Stage2$ShortBlock)
 Stage2$Condition <- factor(Stage2$Condition)
 
+Stage2Count <- mutate(Stage2, counter = Subject>0)
+Stage2Count <- aggregate(counter ~ Subject + ShortBlock + Condition, data = Stage2Count, sum)
 Stage2Condense <- aggregate(Optimal ~ Subject + ShortBlock + Condition, data = Stage2, sum)
+Stage2Condense <- mutate(Stage2Condense, count = Stage2Count$counter)
 
-logModel <- glmer(cbind(Optimal, 32 - Optimal) ~ ShortBlock * Condition + (1 + ShortBlock | Subject), 
-                  family = binomial(),
-                  data = Stage2, 
-                  contrasts = list(ShortBlock = 'contr.poly'),
-                  control = glmerControl(optimizer = 'bobyqa'))
+Stage2Condense$Subject <- factor(Stage2Condense$Subject)
+logModelS2 <- glmer(cbind(Optimal, count - Optimal) ~ ShortBlock * Condition + (1 | Subject), 
+                    family = binomial(),
+                    data = Stage2Condense, 
+                    contrasts = list(ShortBlock = contr.poly, Condition = contr.treatment(2, base = 1)),
+                    control = glmerControl(optimizer = 'bobyqa'))
+S2_2 <- glmer(cbind(Optimal, count - Optimal) ~ Condition + (1 | Subject), 
+              family = binomial(),
+              data = Stage2Condense,
+              control = glmerControl(optimizer = 'bobyqa'))
+S2_3 <- glmer(cbind(Optimal, count - Optimal) ~ ShortBlock + (1 | Subject), 
+              family = binomial(),
+              data = Stage2Condense, 
+              control = glmerControl(optimizer = 'bobyqa'))
+S2_4 <- glmer(cbind(Optimal, count - Optimal) ~ 1 + (1 | Subject), 
+              family = binomial(),
+              data = Stage2Condense, 
+              control = glmerControl(optimizer = 'bobyqa'))
+S2_5 <- glmer(cbind(Optimal, count - Optimal) ~ ShortBlock + Condition + (1 | Subject), 
+              family = binomial(),
+              data = Stage2Condense, 
+              control = glmerControl(optimizer = 'bobyqa'))
 
-summary(logModel)
-Anova(logModel, type = "III")
-# logModel_ci <- confint(logModel, parm = 'beta_', parallel = 'snow', ncpus = 16)
+anova(S2_4, S2_2) #Condition
+anova(S2_4, S2_3) #ShortBlock
+anova(S2_3, S2_5) #Condition + ShortBlock
+anova(S2_5, logModelS2) #Full model w/ Interaction
+
+summary(logModelS2)
+Anova(logModelS2, type = "III")
+# logModelS2_ci <- confint(logModel, parm = 'beta_', parallel = 'snow', ncpus = 16)
 
 #Within/Between ANOVA
-summary(aov(cbind(Optimal, 32 - Optimal)~Condition * ShortBlock + Error(Subject/ShortBlock), data = Stage2Condense))
+Stage2Mean <- aggregate(Optimal ~ Subject + ShortBlock + Condition, data = Stage2, mean)
+ezANOVA(data = Stage2Mean,
+        wid = list(Subject),
+        within = list(ShortBlock), 
+        between = Condition,
+        dv = Optimal, 
+        type = '3')
+
 
 #Linear Mixed Model
-#Responding
-m1 = lmer(data = Stage2, Optimal ~ (1 | Subject), REML = FALSE)
-m2 = lmer(data = Stage2, Optimal ~ Condition + (1 | Subject), REML = FALSE)
-m3 = lmer(data = Stage2, Optimal ~ ShortBlock + (1 + ShortBlock | Subject), REML = FALSE)
-m4 = lmer(data = Stage2, Optimal ~ Condition + ShortBlock + (1 + ShortBlock | Subject), REML = FALSE)
-m5 = lmer(data = Stage2, Optimal ~ Condition * ShortBlock + (1 + ShortBlock | Subject), REML = FALSE)
+#ET
+Stage2HolderPred <- select(Stage2, Condition, ShortBlock, Subject, PropET = PropPred) %>% 
+  mutate(Pred = 1)
+Stage2HolderNP <- select(Stage2, Condition, ShortBlock, Subject, PropET = PropNP) %>% 
+  mutate(Pred = 2)
+Stage2ET <- merge(Stage2HolderPred, Stage2HolderNP, all = TRUE)
+Stage2ET$Pred <- factor(Stage2ET$Pred)
 
-anova(m1, m2, m3, m4, m5)
+linearModel <- lmer(PropET ~ ShortBlock * Condition * Pred + (1 | Subject), 
+                  data = Stage2ET, 
+                  contrasts  = list(ShortBlock = 'contr.poly'))
+
+linearModel2 <- lmer(PropET ~ ShortBlock * Pred + (1 | Subject), 
+                    data = Stage2ET, 
+                    contrasts  = list(ShortBlock = 'contr.poly'))
+
+summary(linearModel)
+Anova(linearModel, type = 'III')
 
 
-# 
-View(group_by(Stage2, Condition, ShortBlock) %>%
-  summarise(mean(Optimal)))
+
+#Run LME for ET
+#Stage 1====
+Stage1 <- filter(finalData, ShortBlock < 10) %>%
+  select(PropNP, PropPred, Condition, ShortBlock, Subject)
+
+
+Stage1$ShortBlock <- factor(Stage1$ShortBlock)
+Stage1$Condition <- factor(Stage1$Condition)
+
+Stage1HolderPred <- select(Stage1, Condition, ShortBlock, Subject, PropET = PropPred) %>% 
+  mutate(Pred = 1)
+Stage1HolderNP <- select(Stage1, Condition, ShortBlock, Subject, PropET = PropNP) %>% 
+  mutate(Pred = 2)
+Stage1ET <- merge(Stage1HolderPred, Stage1HolderNP, all = TRUE)
+Stage1ET$Pred <- factor(Stage1ET$Pred)
+Stage1ET <- aggregate(data = Stage1ET, PropET ~ Condition +  ShortBlock + Subject + Pred, mean)
+
+Stage1ET$Subject <- factor(Stage1ET$Subject)
+#All the LMEs for S1
+Base_S1 <- lmer(PropET ~ 1 + (1 | Subject), 
+                data = Stage1ET,
+                REML = FALSE)
+
+S1_1 <- lmer(PropET ~ Pred + (1 | Subject), 
+             data = Stage1ET,
+             REML = FALSE)
+
+S1_2 <- lmer(PropET ~ Condition + (1 | Subject), 
+             data = Stage1ET,
+             REML = FALSE)
+
+S1_3 <- lmer(PropET ~ ShortBlock + (1 | Subject), 
+             data = Stage1ET,
+             REML = FALSE)
+
+S1_4 <- lmer(PropET ~ ShortBlock + Pred + (1 | Subject), 
+             data = Stage1ET,
+             REML = FALSE)
+
+S1_5 <- lmer(PropET ~ ShortBlock + Condition + (1 | Subject), 
+             data = Stage1ET,
+             REML = FALSE)
+
+S1_6 <- lmer(PropET ~ Pred + Condition + (1 | Subject), 
+             data = Stage1ET,
+             REML = FALSE)
+
+S1_7 <- lmer(PropET ~ Pred + Condition + ShortBlock + (1 | Subject), 
+             data = Stage1ET,
+             REML = FALSE)
+
+S1_8 <- lmer(PropET ~ ShortBlock * Pred + (1 | Subject), 
+             data = Stage1ET,
+             REML = FALSE)
+
+S1_9 <- lmer(PropET ~ ShortBlock * Condition + (1 | Subject), 
+             data = Stage1ET,
+             REML = FALSE)
+
+S1_10 <- lmer(PropET ~ Pred * Condition + (1 | Subject), 
+              data = Stage1ET,
+              REML = FALSE)
+
+S1_11 <- lmer(PropET ~ Pred * ShortBlock + Condition + (1 | Subject), 
+              data = Stage1ET,
+              REML = FALSE)
+
+S1_12 <- lmer(PropET ~ Pred * Condition + ShortBlock + (1 | Subject), 
+              data = Stage1ET,
+              REML = FALSE)
+
+S1_13 <- lmer(PropET ~ Pred + Condition * ShortBlock + (1 | Subject), 
+              data = Stage1ET,
+              REML = FALSE)
+
+S1_14 <- lmer(PropET ~ Pred * Condition + Condition * ShortBlock + (1 | Subject), 
+              data = Stage1ET,
+              REML = FALSE)
+
+S1_15 <- lmer(PropET ~ Pred * ShortBlock + Condition * ShortBlock + (1 | Subject), 
+              data = Stage1ET,
+              REML = FALSE)
+
+S1_16 <- lmer(PropET ~ Pred * Condition + Pred * ShortBlock + (1 | Subject), 
+              data = Stage1ET,
+              REML = FALSE)
+
+S1_17 <- lmer(PropET ~ Pred * Condition + Pred * ShortBlock + ShortBlock * Condition + (1 | Subject), 
+              data = Stage1ET,
+              REML = FALSE)
+
+S1_18 <- lmer(PropET ~ Pred * Condition * ShortBlock + (1 | Subject), 
+              data = Stage1ET,
+              contrasts  = list(ShortBlock = 'contr.poly', Condition = contr.sum),
+              REML = FALSE)
+
+anova(S1_1, S1_2, S1_3, S1_4, S1_5, S1_6, S1_7, S1_8, S1_9, S1_10, S1_11, S1_12, S1_13, S1_14, S1_15, S1_16, S1_17, S1_18, Base_S1)
+#Condition has no main effect:Base_S1, S1_2; S1_11, S1_8
+#Pred has a main effect: Base_S1, S1_1, S1_1, S1_9
+#Short Block has a main effect: Base_S1, S1_3; S1_12, S1_10
+
+anova(Base_S1, S1_2) #Condition
+anova(Base_S1, S1_3) #Predictiveness
+anova(Base_S1, S1_1) #Block
+anova(S1_4, S1_8) #Block*Pred
+anova(S1_5, S1_9) #Block * Cond
+anova(S1_6, S1_10) #Cond*Pred
+anova(S1_17, S1_18) #Three Way interaction
+
+Anova(S1_18, type = 'III')
+summary(S1_18)
+#Computer Profile Likelihood Confidence Intervals
+linModelS1_ci <- confint(S1_18, parm = 'beta_', parallel = 'snow', ncpus = 16)
+
+#Transition ====
+Trans <- filter(finalData, ShortBlock == 9 | ShortBlock == 10) %>%
+  select(PropNP, PropPred, Condition, ShortBlock, Subject)
+
+Trans$ShortBlock <- factor(Trans$ShortBlock)
+Trans$Condition <- factor(Trans$Condition)
+
+TransHolderPred <- select(Trans, Condition, ShortBlock, Subject, PropET = PropPred) %>% 
+  mutate(Pred = 1)
+TransHolderNP <- select(Trans, Condition, ShortBlock, Subject, PropET = PropNP) %>% 
+  mutate(Pred = 2)
+TransET <- merge(TransHolderPred, TransHolderNP, all = TRUE)
+TransET$Pred <- factor(TransET$Pred)
+TransET <- aggregate(data = TransET, PropET ~ Condition +  ShortBlock + Subject + Pred, mean)
+
+
+#All the LMEs for Trans
+Base_T <- lmer(PropET ~ 1 + (1 | Subject), 
+               data = TransET,
+               REML = FALSE)
+
+T_1 <- lmer(PropET ~ Pred + (1 | Subject), 
+            data = TransET,
+            REML = FALSE)
+
+T_2 <- lmer(PropET ~ Condition + (1 | Subject), 
+            data = TransET,
+            REML = FALSE)
+
+T_3 <- lmer(PropET ~ ShortBlock + (1 | Subject), 
+            data = TransET,
+            REML = FALSE)
+
+T_4 <- lmer(PropET ~ ShortBlock + Pred + (1 | Subject), 
+            data = TransET,
+            REML = FALSE)
+
+T_5 <- lmer(PropET ~ ShortBlock + Condition + (1 | Subject), 
+            data = TransET,
+            REML = FALSE)
+
+T_6 <- lmer(PropET ~ Pred + Condition + (1 | Subject), 
+            data = TransET,
+            REML = FALSE)
+
+T_7 <- lmer(PropET ~ Pred + Condition + ShortBlock + (1 | Subject), 
+            data = TransET,
+            REML = FALSE)
+
+T_8 <- lmer(PropET ~ ShortBlock * Pred + (1 | Subject), 
+            data = TransET,
+            REML = FALSE)
+
+T_9 <- lmer(PropET ~ ShortBlock * Condition + (1 | Subject), 
+            data = TransET,
+            REML = FALSE)
+
+T_10 <- lmer(PropET ~ Pred * Condition + (1 | Subject), 
+             data = TransET,
+             REML = FALSE)
+
+T_11 <- lmer(PropET ~ Pred * ShortBlock + Condition + (1 | Subject), 
+             data = TransET,
+             REML = FALSE)
+
+T_12 <- lmer(PropET ~ Pred * Condition + ShortBlock + (1 | Subject), 
+             data = TransET,
+             REML = FALSE)
+
+T_13 <- lmer(PropET ~ Pred + Condition * ShortBlock + (1 | Subject), 
+             data = TransET,
+             REML = FALSE)
+
+T_14 <- lmer(PropET ~ Pred * Condition + Condition * ShortBlock + (1 | Subject), 
+             data = TransET,
+             REML = FALSE)
+
+T_15 <- lmer(PropET ~ Pred * ShortBlock + Condition * ShortBlock + (1 | Subject), 
+             data = TransET,
+             REML = FALSE)
+
+T_16 <- lmer(PropET ~ Pred * Condition + Pred * ShortBlock + (1 | Subject), 
+             data = TransET,
+             REML = FALSE)
+
+T_17 <- lmer(PropET ~ Pred * Condition + Pred * ShortBlock + ShortBlock * Condition + (1 | Subject), 
+             data = TransET,
+             REML = FALSE)
+
+T_18 <- lmer(PropET ~ Pred * Condition * ShortBlock + (1 | Subject), 
+             data = TransET,
+             contrasts  = list(ShortBlock = 'contr.poly', Condition = contr.sum),
+             REML = FALSE)
+
+
+anova(T_1, T_2, T_3, T_4, T_5, T_6, T_7, T_8, T_9, T_10, T_11, T_12, T_13, T_14, T_15, T_16, T_17, T_18, Base_T)
+
+anova(Base_T, T_2) #Condition
+anova(Base_T, T_1) #Predictiveness
+anova(Base_T, T_3) #Block
+anova(T_4, T_8) #Block*Pred
+anova(T_5, T_9) #Block * Cond
+anova(T_6, T_10) #Cond*Pred
+anova(T_17, T_18) #Three Way interaction
+
+Anova(T_18, type = 'III')
+# summary(T_18)
+#Computer Profile Likelihood Confidence Intervals
+linModelT_ci <- confint(T_18, parm = 'beta_', parallel = 'snow', ncpus = 16)
+
+#Stage 2 ====
+Stage2 <- filter(finalData, ShortBlock >= 10) %>%
+  select(PropNP, PropPred, Condition, ShortBlock, Subject)
+
+Stage2$ShortBlock <- factor(Stage2$ShortBlock)
+Stage2$Condition <- factor(Stage2$Condition)
+
+Stage2HolderPred <- select(Stage2, Condition, ShortBlock, Subject, PropET = PropPred) %>% 
+  mutate(Pred = 1)
+Stage2HolderNP <- select(Stage2, Condition, ShortBlock, Subject, PropET = PropNP) %>% 
+  mutate(Pred = 2)
+Stage2ET <- merge(Stage2HolderPred, Stage2HolderNP, all = TRUE)
+Stage2ET$Pred <- factor(Stage2ET$Pred)
+Stage2ET <- aggregate(data = Stage2ET, PropET ~ Condition +  ShortBlock + Subject + Pred, mean)
+
+#All the LMEs for S2
+Base_S2 <- lmer(PropET ~ 1 + (1 | Subject), 
+                data = Stage2ET,
+                REML = FALSE)
+
+S2_1 <- lmer(PropET ~ Pred + (1 | Subject), 
+             data = Stage2ET,
+             REML = FALSE)
+
+S2_2 <- lmer(PropET ~ Condition + (1 | Subject), 
+             data = Stage2ET,
+             REML = FALSE)
+
+S2_3 <- lmer(PropET ~ ShortBlock + (1 | Subject), 
+             data = Stage2ET,
+             REML = FALSE)
+
+S2_4 <- lmer(PropET ~ ShortBlock + Pred + (1 | Subject), 
+             data = Stage2ET,
+             REML = FALSE)
+
+S2_5 <- lmer(PropET ~ ShortBlock + Condition + (1 | Subject), 
+             data = Stage2ET,
+             REML = FALSE)
+
+S2_6 <- lmer(PropET ~ Pred + Condition + (1 | Subject), 
+             data = Stage2ET,
+             REML = FALSE)
+
+S2_7 <- lmer(PropET ~ Pred + Condition + ShortBlock + (1 | Subject), 
+             data = Stage2ET,
+             REML = FALSE)
+
+S2_8 <- lmer(PropET ~ ShortBlock * Pred + (1 | Subject), 
+             data = Stage2ET,
+             REML = FALSE)
+
+S2_9 <- lmer(PropET ~ ShortBlock * Condition + (1 | Subject), 
+             data = Stage2ET,
+             REML = FALSE)
+
+S2_10 <- lmer(PropET ~ Pred * Condition + (1 | Subject), 
+              data = Stage2ET,
+              REML = FALSE)
+
+S2_11 <- lmer(PropET ~ Pred * ShortBlock + Condition + (1 | Subject), 
+              data = Stage2ET,
+              REML = FALSE)
+
+S2_12 <- lmer(PropET ~ Pred * Condition + ShortBlock + (1 | Subject), 
+              data = Stage2ET,
+              REML = FALSE)
+
+S2_13 <- lmer(PropET ~ Pred + Condition * ShortBlock + (1 | Subject), 
+              data = Stage2ET,
+              REML = FALSE)
+
+S2_14 <- lmer(PropET ~ Pred * Condition + Condition * ShortBlock + (1 | Subject), 
+              data = Stage2ET,
+              REML = FALSE)
+
+S2_15 <- lmer(PropET ~ Pred * ShortBlock + Condition * ShortBlock + (1 | Subject), 
+              data = Stage2ET,
+              REML = FALSE)
+
+S2_16 <- lmer(PropET ~ Pred * Condition + Pred * ShortBlock + (1 | Subject), 
+              data = Stage2ET,
+              REML = FALSE)
+
+S2_17 <- lmer(PropET ~ Pred * Condition + Pred * ShortBlock + Condition * ShortBlock + (1 | Subject), 
+              data = Stage2ET,
+              REML = FALSE)
+
+S2_18 <- lmer(PropET ~ Pred * Condition * ShortBlock + (1 | Subject), 
+              data = Stage2ET,
+              contrasts  = list(ShortBlock = 'contr.poly', Condition = contr.sum),
+              REML = FALSE)
+
+anova(S2_1, S2_2, S2_3, S2_4, S2_5, S2_6, S2_7, S2_8, S2_9, S2_10, S2_11, S2_12, S2_13, S2_14, S2_15, S2_16, S2_17, S2_18, Base_S2)
+
+anova(Base_S2, S2_2) #Condition
+anova(Base_S2, S2_1) #Predictiveness
+anova(Base_S2, S2_3) #Block
+anova(S2_4, S2_8) #Block*Pred
+anova(S2_5, S2_9) #Block * Cond
+anova(S2_6, S2_10) #Cond*Pred
+anova(S2_17, S2_18) #Three Way interaction
+
+Anova(S2_18, Type = 'III')
+# summary(S2_18)
+#Computer Profile Likelihood Confidence Intervals
+linModelS2_ci <- confint(S2_18, parm = 'beta_', parallel = 'snow', ncpus = 16)
+
+# Basic Tests ====
+View(group_by(Stage2ET, ShortBlock) %>%
+  summarise(mean(PropET)))
+x <- group_by(Stage2, Condition, Subject) %>%
+       summarise(boop = mean(Optimal))
+lol <- filter(x, Condition == 'S2C')
+lol2 <- filter(x, Condition == 'S2M')
+t.test(lol$boop, lol2$boop)
 
 setwd('../New_Analysis')
