@@ -92,7 +92,42 @@ finalData <- group_by(finalData, Subject, Block, Condition) %>%
 finalData$Condition <- factor(finalData$Condition, levels = c(1, 2), labels = c('S2C', 'S2M'))
 # finalData$ShortBlock <- factor(finalData$ShortBlock)
 
-#Performance Trials
+#Tests for Matlab Stats ----
+MatlabBlock <- group_by(finalData, Condition, Block, Subject, ShortBlock, Section) %>% 
+  summarise(Performance = mean(Optimal),
+            PropPred = mean(PropPred),
+            PropNP = mean(PropNP),
+            totalET = mean(totalET))
+
+MatlabBlock <- aggregate(data = MatlabBlock, Performance ~ Condition + ShortBlock + Subject +  Section, mean)
+MatlabBlock$ShortBlock <- factor(MatlabBlock$ShortBlock)
+MatlabBlock$Condition <- factor(MatlabBlock$Condition)
+MatlabBlockS1 <- filter(MatlabBlock, Section == 1)
+MatlabBlockT <- filter(MatlabBlock, ShortBlock == 9 | ShortBlock == 10)
+MatlabBlockS2 <- filter(MatlabBlock, Section == 2) 
+
+x <- reshape(MatlabBlockS2, idvar = "Subject", timevar = "ShortBlock", direction = "wide")
+write_excel_csv(x, 'MatlabComp.csv')
+
+ezANOVA(data = MatlabBlockS1, 
+        wid = Subject,
+        between = Condition,
+        within = ShortBlock,
+        dv = Performance)
+
+ezANOVA(data = MatlabBlockT, 
+        wid = Subject,
+        between = Condition,
+        within = ShortBlock,
+        dv = Performance)
+
+ezANOVA(data = MatlabBlockS2, 
+        wid = Subject,
+        between = Condition,
+        within = ShortBlock,
+        dv = Performance)
+
+  #Performance Trials
 testBlock <- group_by(finalData, Condition, ShortBlock, Subject) %>% 
   summarise(Performance = mean(Optimal),
             PropPred = mean(PropPred),
