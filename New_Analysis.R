@@ -8,7 +8,7 @@ require('aod')
 require('car')
 require('lmerTest')
 
-pNum <- 29 #Number of participants to analyse
+pNum <- 45 #Number of participants to analyse
 cNum <- 2 #Number of conditions to Analyse
 
 for (cond in 1:cNum){
@@ -69,16 +69,28 @@ finalData <- mutate(finalData, ShortBlock = case_when(Block == 1 | Block == 2 ~ 
 
 finalData <- as_tibble(finalData)
 
-finalData <-filter(finalData, !(Condition == 1 & Subject == 1)) #Filter bad participants (DON'T FORGET TO REMOVE THESE)
+#Filter bad participants (DON'T FORGET TO REMOVE THESE)
 finalData <-filter(finalData, !(Condition == 1 & Subject == 5))
 finalData <-filter(finalData, !(Condition == 1 & Subject == 9))
 finalData <-filter(finalData, !(Condition == 1 & Subject == 14))
 finalData <-filter(finalData, !(Condition == 1 & Subject == 19))
 finalData <-filter(finalData, !(Condition == 1 & Subject == 26))
+finalData <-filter(finalData, !(Condition == 1 & Subject == 33))
+finalData <-filter(finalData, !(Condition == 1 & Subject == 34))
+finalData <-filter(finalData, !(Condition == 1 & Subject == 35))
+finalData <-filter(finalData, !(Condition == 1 & Subject == 42))
+finalData <-filter(finalData, !(Condition == 1 & Subject == 43))
+finalData <-filter(finalData, !(Condition == 1 & Subject == 44))
+finalData <-filter(finalData, !(Condition == 1 & Subject == 45))
 
-finalData <-filter(finalData, !(Condition == 2 & Subject == 19 + (cond - 1) * pNum))
+
 finalData <-filter(finalData, !(Condition == 2 & Subject == 20 + (cond - 1) * pNum))
 finalData <-filter(finalData, !(Condition == 2 & Subject == 21 + (cond - 1) * pNum))
+finalData <-filter(finalData, !(Condition == 2 & Subject == 32 + (cond - 1) * pNum))
+finalData <-filter(finalData, !(Condition == 2 & Subject == 33 + (cond - 1) * pNum))
+finalData <-filter(finalData, !(Condition == 2 & Subject == 36 + (cond - 1) * pNum))
+finalData <-filter(finalData, !(Condition == 2 & Subject == 37 + (cond - 1) * pNum))
+
 
 #Remove trials with bad RT times
 #R Differs from Matlab because MATLAB averages the blocks first and then averages again (weighting blocks with fewer trials 
@@ -233,7 +245,7 @@ Stage1Condense$Subject = factor(Stage1Condense$Subject)
 logModelS1 <- glmer(cbind(Optimal, count - Optimal) ~ ShortBlock * Condition + (1 | Subject), 
                     family = binomial(),
                     data = Stage1Condense, 
-                    contrasts = list(ShortBlock = contr.poly, Condition = contr.helmert(2)),
+                    contrasts = list(ShortBlock = contr.poly, Condition = contr.sum(2)),
                     control = glmerControl(optimizer = 'bobyqa'))
 S1_2 <- glmer(cbind(Optimal, count - Optimal) ~ Condition + (1 | Subject), 
               family = binomial(),
@@ -483,7 +495,7 @@ S1_17 <- lmer(PropET ~ Pred * Condition + Pred * ShortBlock + ShortBlock * Condi
 
 S1_18 <- lmer(PropET ~ Pred * Condition * ShortBlock + (1 | Subject), 
               data = Stage1ET,
-              contrasts  = list(ShortBlock = 'contr.poly', Condition = contr.sum),
+              contrasts  = list(ShortBlock = 'contr.poly', Condition = contr.sum, Pred = contr.sum),
               REML = FALSE)
 
 anova(S1_1, S1_2, S1_3, S1_4, S1_5, S1_6, S1_7, S1_8, S1_9, S1_10, S1_11, S1_12, S1_13, S1_14, S1_15, S1_16, S1_17, S1_18, Base_S1)
@@ -503,6 +515,13 @@ Anova(S1_18, type = 'III')
 summary(S1_18)
 #Computer Profile Likelihood Confidence Intervals
 linModelS1_ci <- confint(S1_18, parm = 'beta_', parallel = 'snow', ncpus = 16)
+
+ezANOVA(data = Stage1ET,
+        wid = list(Subject),
+        within = list(ShortBlock, Pred), 
+        between = Condition,
+        dv = PropET, 
+        type = '3')
 
 #Transition ====
 Trans <- filter(finalData, ShortBlock == 9 | ShortBlock == 10) %>%
@@ -595,7 +614,7 @@ T_17 <- lmer(PropET ~ Pred * Condition + Pred * ShortBlock + ShortBlock * Condit
 
 T_18 <- lmer(PropET ~ Pred * Condition * ShortBlock + (1 | Subject), 
              data = TransET,
-             contrasts  = list(ShortBlock = 'contr.poly', Condition = contr.sum),
+             contrasts  = list(ShortBlock = 'contr.poly', Condition = contr.sum, Pred = contr.sum),
              REML = FALSE)
 
 
@@ -704,7 +723,7 @@ S2_17 <- lmer(PropET ~ Pred * Condition + Pred * ShortBlock + Condition * ShortB
 
 S2_18 <- lmer(PropET ~ Pred * Condition * ShortBlock + (1 | Subject), 
               data = Stage2ET,
-              contrasts  = list(ShortBlock = 'contr.poly', Condition = contr.sum),
+              contrasts  = list(ShortBlock = 'contr.poly', Condition = contr.sum, Pred = contr.sum),
               REML = FALSE)
 
 anova(S2_1, S2_2, S2_3, S2_4, S2_5, S2_6, S2_7, S2_8, S2_9, S2_10, S2_11, S2_12, S2_13, S2_14, S2_15, S2_16, S2_17, S2_18, Base_S2)
@@ -718,6 +737,14 @@ anova(S2_6, S2_10) #Cond*Pred
 anova(S2_17, S2_18) #Three Way interaction
 
 Anova(S2_18, Type = 'III')
+
+ezANOVA(data = Stage2ET,
+        wid = list(Subject),
+        within = list(ShortBlock, Pred), 
+        between = Condition,
+        dv = PropET, 
+        type = '3')
+
 # summary(S2_18)
 #Computer Profile Likelihood Confidence Intervals
 linModelS2_ci <- confint(S2_18, parm = 'beta_', parallel = 'snow', ncpus = 16)
