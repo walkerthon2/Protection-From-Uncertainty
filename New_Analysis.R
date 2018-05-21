@@ -228,6 +228,9 @@ ggplot(data = testBlock, aes(x = ShortBlock, colour = Condition, group = Conditi
 Stage1 <- filter(finalData, Section == 1) %>%
   select(Optimal, Condition, ShortBlock, Subject)
 
+# Stage1 <- filter(finalData, ShortBlock <= 9 | ShortBlock > 3) %>%
+#   select(Optimal, Condition, ShortBlock, Subject)
+
 #Logistic Regression
 #https://osf.io/z57tn/
 Stage1$ShortBlock <- factor(Stage1$ShortBlock)
